@@ -3,10 +3,12 @@ Shader "Master/Toon"
     Properties
     {
         _Diffuse("Diffuse", Color) = (1, 1, 1, 1)
+        _Specular ("Specular", Color) = (1, 1, 1, 1)
+        _Gloss ("Gloss", Range(8.0, 256)) = 20
     }
     SubShader
     {
-        Pass
+        Pass    // 黑色描边
         {
             Tags { "LightMode" = "ForwardBase" }
             
@@ -31,6 +33,7 @@ Shader "Master/Toon"
             {
                 float3 worldNormal : TEXCOORD0;
                 float4 pos : SV_POSITION;
+                float3 worldPos : TEXCOORD1;
             };
 
             float4 _Diffuse;
@@ -39,11 +42,9 @@ Shader "Master/Toon"
             {
                 v2f o;
 
-                // 顶点偏移方便查看结果
-                // o.pos.x += 0.5;
-
                 // 获取法线
                 float3 normal = v.normal;
+                
                 // 顶点加一点法线，以扩大边缘
                 v.vertex.xyz += normal * 0.02;
 
@@ -62,6 +63,7 @@ Shader "Master/Toon"
         Pass
         {
             Tags { "LightMode" = "ForwardBase" }
+            Cull Back
             
             CGPROGRAM
             
@@ -74,16 +76,18 @@ Shader "Master/Toon"
             struct appdata
             {
                 float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
                 float3 normal : NORMAL;
             };
 
             float4 _Diffuse;
+            fixed4 _Specular;
+            float _Gloss;
 
             struct  v2f
             {
                 float3 worldNormal : TEXCOORD0;
                 float4 pos : SV_POSITION;
+                float3 worldPos : TEXCOORD1;
             };
 
             v2f vert (appdata v)
@@ -92,27 +96,10 @@ Shader "Master/Toon"
 
                 // 裁剪空间中的顶点位置
                 o.pos = UnityObjectToClipPos(v.vertex);
+                // 表面法线
                 o.worldNormal = normalize(mul(v.normal, (float3x3)unity_WorldToObject));
-                // // 环境光
-                // fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
-                // // 表面法线
-                // fixed3 worldNormal = normalize(mul(v.normal, (float3x3)unity_WorldToObject));
-                
-                // // 顶点到光源方向
-                // fixed3 worldLight = normalize(_WorldSpaceLightPos0.xyz);
-                //
-                // // fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal, worldLight));
-                // // 颜色分段
-                // float NdotL = saturate(dot(worldNormal, worldLight));
-                // if(NdotL > 0.9)
-                //     NdotL = 1;
-                // else if (NdotL > 0.5)
-                //     NdotL = 0.6;
-                // else
-                //     NdotL = 0;
-                // fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * NdotL;
-                //
-                // o.color = ambient + diffuse;
+                // 算出顶点在世界空间的位置
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 
                 return o;
             }
@@ -121,22 +108,37 @@ Shader "Master/Toon"
             {
                 // 环境光
                 fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
-                // 顶点到光源方向
-                fixed3 worldLight = normalize(_WorldSpaceLightPos0.xyz);
 
-                // fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(i.worldNormal, worldLight));
+                fixed3 worldNormal = normalize(i.worldNormal);
+                
+                // 顶点到光源方向
+                fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
+
                 // 颜色分段
                 // float NdotL = saturate(dot(i.worldNormal, worldLight)); // 兰伯特模型
-                float NdotL = 0.5 + 0.5 * dot(i.worldNormal, worldLight);   // "半兰伯特"模型
-                if(NdotL > 0.9)
+                float NdotL = 0.5 + 0.5 * dot(i.worldNormal, worldLightDir);   // "半兰伯特"模型
+                if(NdotL > 0.6)
                     NdotL = 1;
-                else if (NdotL > 0.5)
-                    NdotL = 0.6;
+                else if (NdotL > 0.2)
+                    NdotL = 0.3;
                 else
-                    NdotL = 0;
+                    NdotL = 0.1;
                 fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * NdotL;
 
-                return fixed4(ambient + diffuse, 1.0);
+                // 反射方向
+                fixed3 reflectDir = normalize(reflect(-worldLightDir, worldNormal));
+                // 照相机方向（视线方向）
+                fixed3 viewDir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos.xyz);
+                // 高光反射
+                float spec = pow(saturate(dot(reflectDir, viewDir)), _Gloss);
+                if(spec > 0.001)
+                    spec = 1;
+                else
+                    spec = 0;
+
+                fixed3 specular = _LightColor0.rgb * _Specular.rgb * spec;
+
+                return fixed4(ambient + diffuse + specular, 1.0);
             }
             ENDCG
         }
