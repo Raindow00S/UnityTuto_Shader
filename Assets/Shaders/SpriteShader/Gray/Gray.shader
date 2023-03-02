@@ -5,6 +5,9 @@ Shader "Master/SpriteShader/Gray"
         _MainTex ("Texture", 2D) = "white" {}
         
         _GrayFactor ("GrayFactor", Range(0, 1)) = 1
+//        _IsReverse ("IsReverse", bool) = false    // shader中不能使用bool
+        [Toggle(_IsReverse)] _IsReverse ("IsReverse", float) = 0
+        [Toggle(_IsVertical)] _IsVertical ("IsVertical", float) = 0
     }
     SubShader
     {
@@ -46,6 +49,8 @@ Shader "Master/SpriteShader/Gray"
 
             sampler2D _MainTex;
             float _GrayFactor;
+            float _IsReverse;
+            float _IsVertical;
 
             fixed4 frag (v2f i) : SV_Target
             {
@@ -54,7 +59,17 @@ Shader "Master/SpriteShader/Gray"
                 // col.rgb = 1 - col.rgb;
 
                 fixed4 grayCol = col.r * 0.299 + col.g * 0.587 + col.b * 0.114;
-                col = lerp(col, grayCol, _GrayFactor);
+                // col = lerp(col, grayCol, _GrayFactor);
+
+                float arg = 1;
+                if(_IsVertical == 0)
+                    arg = i.uv.x;
+                else
+                    arg = i.uv.y;
+                if(_IsReverse == 1)
+                    arg = 1 - arg;
+                
+                col = lerp(col, grayCol, arg * _GrayFactor);
                 
                 return col;
             }
