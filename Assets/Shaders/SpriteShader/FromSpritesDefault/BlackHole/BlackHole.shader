@@ -121,7 +121,7 @@ Shader "Master/SpriteShader/BlackHole"
 				float2 center = float2(_CenterX, _CenterY);
 
 				// 单纯的旋转
-				// 如果没有加减center的操作，会绕左下角原点旋转
+				// 如果没有加减center的操作，会绕左下角原点旋转【unity shader原点好像在左上角！】
 				uv -= center;
 				uv.xy = mul(uv, rotationMatrix);
 				uv += center;
